@@ -58,7 +58,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             if credentials:
                 self._csr_user = credentials['username']
                 self._csr_password = credentials['password']
-            self._timeout = cfg.CONF.cfg_agent.device_connection_timeout
+            self._timeout = (device_params['timeout'] or
+                             cfg.CONF.cfg_agent.device_connection_timeout)
             self._csr_conn = None
             self._intfs_enabled = False
         except KeyError as e:
@@ -160,8 +161,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
         vrf_name = self._csr_get_vrf_name(ri)
-        in_vlan = self._get_interface_vlan_from_hosting_port(port)
-        acl_no = 'acl_' + str(in_vlan)
+        num = self._generate_acl_num_from_hosting_port(port)
+        acl_no = 'acl_' + str(num)
         internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
@@ -176,8 +177,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         #First disable nat in all inner ports
         for port in ports:
             in_intfc_name = self._get_interface_name_from_hosting_port(port)
-            inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-            acls.append("acl_" + str(inner_vlan))
+            num = self._generate_acl_num_from_hosting_port(port)
+            acls.append("acl_" + str(num))
             self._remove_interface_nat(in_intfc_name, 'inside')
 
         #Wait for two second
@@ -276,9 +277,12 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         intfc_name = 'GigabitEthernet%s.%s' % (int_no, vlan)
         return intfc_name
 
-    @staticmethod
-    def _get_interface_vlan_from_hosting_port(port):
+    def _get_interface_vlan_from_hosting_port(self, port):
         return port['hosting_info']['segmentation_id']
+
+    def _generate_acl_num_from_hosting_port(self, port):
+        # In the case of the N1kv driver, we use the vlan of the tenant netwk
+        return self._get_interface_vlan_from_hosting_port(port)
 
     @staticmethod
     def _get_interface_no_from_hosting_port(port):
@@ -386,7 +390,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         vrfs = []
         ioscfg = self._get_running_config()
         parse = ciscoconfparse.CiscoConfParse(ioscfg)
-        vrfs_raw = parse.find_lines("^ip vrf")
+        vrfs_raw = parse.find_lines("^vrf definition")
         for line in vrfs_raw:
             #  raw format ['ip vrf <vrf-name>',....]
             vrf_name = line.strip().split(' ')[2]
@@ -645,10 +649,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _edit_running_config(self, confstr, snippet):
         conn = self._get_connection()
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, snippet)
+        self._check_response(rpc_obj, snippet, confstr=confstr)
 
     @staticmethod
-    def _check_response(rpc_obj, snippet_name):
+    def _check_response(rpc_obj, snippet_name, confstr=None):
         """This function checks the rpc response object for status.
 
         This function takes as input the response rpc_obj and the snippet name
@@ -684,5 +688,6 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         # Not Ok, we throw a ConfigurationException
         e_type = rpc_obj._root[0][0].text
         e_tag = rpc_obj._root[0][1].text
-        params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag}
+        params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag,
+                  'confstr': confstr}
         raise cfg_exc.CSR1kvConfigException(**params)

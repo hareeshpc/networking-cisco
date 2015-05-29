@@ -234,3 +234,7 @@ class ProfileTenantBindingNotFound(exceptions.NotFound):
 class NoClusterFound(exceptions.NotFound):
     """No service cluster found to perform multi-segment bridging."""
     message = _("No service cluster found to perform multi-segment bridging.")
+
+
+class PortNotUnBoundException(exceptions.NeutronException):
+    message = _("Port: %(port_id)s not unbound yet.")
