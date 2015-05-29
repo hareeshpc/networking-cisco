@@ -119,17 +119,21 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
         e_context = context.elevated()
         if old_ext_gw is not None and old_ext_gw != new_ext_gw:
             o_r = self._make_router_dict(o_r_db, process_extensions=False)
-            # no need to schedule now since we're only doing this to tear-down
-            # connectivity and there won't be any if not already scheduled.
-            self._add_type_and_hosting_device_info(e_context, o_r,
-                                                   schedule=False)
+            # no need to schedule now since we're only doing this to
+            # tear-down connectivity and there won't be any if not
+            # already scheduled.
+            r_hd_binding = self._get_router_binding_info(e_context, id)   
+            self._add_type_and_hosting_device_info(
+                    e_context, o_r, binding_info=r_hd_binding, schedule=False)
             p_drv = self.get_hosting_device_plugging_driver()
             if p_drv is not None:
-                p_drv.teardown_logical_port_connectivity(e_context,
-                                                         o_r_db.gw_port)
+                p_drv.teardown_logical_port_connectivity(
+                    e_context,
+                    o_r_db.gw_port,
+                    r_hd_binding.hosting_device_id)
         router_updated = (
-            super(L3RouterApplianceDBMixin, self).update_router(context, id,
-                                                                router))
+            super(L3RouterApplianceDBMixin, self).update_router(
+                context, id, router))
         routers = [copy.deepcopy(router_updated)]
         self._add_type_and_hosting_device_info(e_context, routers[0])
         self.l3_cfg_rpc_notifier.routers_updated(context, routers)
@@ -147,8 +151,10 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
             if p_drv is not None:
                 LOG.debug("Tearing down connectivity for port %s",
                           router_db.gw_port.id)
-                p_drv.teardown_logical_port_connectivity(e_context,
-                                                         router_db.gw_port)
+                p_drv.teardown_logical_port_connectivity(
+                    e_context,
+                    router_db.gw_port,
+                    r_hd_binding.hosting_device_id)
         # conditionally remove router from backlog just to be sure
         self.remove_router_from_backlog(id)
         self.l3_cfg_rpc_notifier.router_deleted(context, router)
@@ -198,12 +204,17 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
             raise n_exc.BadRequest(resource='router', msg=msg)
         routers = [self.get_router(context, router_id)]
         e_context = context.elevated()
-        self._add_type_and_hosting_device_info(e_context, routers[0])
+        r_hd_binding = self._get_router_binding_info(e_context, router_id)
+        self._add_type_and_hosting_device_info(e_context, routers[0],
+                                               binding_info=r_hd_binding)
         p_drv = self.get_hosting_device_plugging_driver()
         if p_drv is not None:
-            p_drv.teardown_logical_port_connectivity(e_context, port_db)
-        info = super(L3RouterApplianceDBMixin, self).remove_router_interface(
-            context, router_id, interface_info)
+            p_drv.teardown_logical_port_connectivity(
+                e_context,
+                port_db,
+                r_hd_binding.hosting_device_id)
+        info = (super(L3RouterApplianceDBMixin, self).remove_router_interface(
+            context, router_id, interface_info))
         self.notify_router_interface_action(context, info, routers, 'remove')
         return info
 
@@ -534,7 +545,8 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
             context.session.expire(port_db)
         # allocation succeeded so establish connectivity for logical port
         context.session.expire(h_info)
-        plugging_driver.setup_logical_port_connectivity(context, port_db)
+        plugging_driver.setup_logical_port_connectivity(context, port_db,
+                                                        hosting_device_id)
         return h_info
 
     def _get_router_port_db_on_subnet(self, context, router_id, subnet):

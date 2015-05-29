@@ -58,7 +58,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             if credentials:
                 self._csr_user = credentials['username']
                 self._csr_password = credentials['password']
-            self._timeout = cfg.CONF.cfg_agent.device_connection_timeout
+            self._timeout = (device_params['timeout'] or
+                             cfg.CONF.cfg_agent.device_connection_timeout)
             self._csr_conn = None
             self._intfs_enabled = False
         except KeyError as e:
@@ -386,7 +387,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         vrfs = []
         ioscfg = self._get_running_config()
         parse = ciscoconfparse.CiscoConfParse(ioscfg)
-        vrfs_raw = parse.find_lines("^ip vrf")
+        vrfs_raw = parse.find_lines("^vrf definition")
         for line in vrfs_raw:
             #  raw format ['ip vrf <vrf-name>',....]
             vrf_name = line.strip().split(' ')[2]
@@ -645,10 +646,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _edit_running_config(self, confstr, snippet):
         conn = self._get_connection()
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, snippet)
+        self._check_response(rpc_obj, snippet, confstr=confstr)
 
     @staticmethod
-    def _check_response(rpc_obj, snippet_name):
+    def _check_response(rpc_obj, snippet_name, confstr=None):
         """This function checks the rpc response object for status.
 
         This function takes as input the response rpc_obj and the snippet name
@@ -684,5 +685,6 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         # Not Ok, we throw a ConfigurationException
         e_type = rpc_obj._root[0][0].text
         e_tag = rpc_obj._root[0][1].text
-        params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag}
+        params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag,
+                  'confstr': confstr}
         raise cfg_exc.CSR1kvConfigException(**params)

@@ -87,6 +87,34 @@ REMOVE_VRF = """
         </cli-config-data>
 </config>
 """
+#=================================================#
+# Configure interface
+# $(config)interface GigabitEthernet 2
+# $(config)vrf forwarding nrouter-e7d4y5
+# $(config)ip address 192.168.0.1 255.255.255.0
+#=================================================#
+CONFIGURE_INTERFACE = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
+            <cmd>ip address %s %s</cmd>
+            <cmd>no shutdown</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=================================================#
+# Deconfigure Interface
+# $(config)no interface GigabitEthernet 2
+#=================================================#
+DECONFIGURE_INTERFACE = """
+<config>
+        <cli-config-data>
+            <cmd>default interface %s</cmd>
+        </cli-config-data>
+</config>
+"""
 
 #=================================================#
 # Create Subinterface
@@ -350,4 +378,17 @@ CLEAR_DYN_NAT_TRANS = """
             <cmd>do clear ip nat translation forced</cmd>
         </cli-config-data>
 </config>
+"""
+
+## Additional stuff for CSR
+
+GET_VNIC_MAPPING = """
+<filter>
+    <config-format-text-cmd>
+        <text-filter-spec> | include version </text-filter-spec>
+    </config-format-text-cmd>
+    <oper-data-format-text-block>
+        <exec>show platform software vnic-if interface-mapping</exec>
+    </oper-data-format-text-block>
+</filter>
 """
