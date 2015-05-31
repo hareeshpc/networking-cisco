@@ -1,15 +1,17 @@
 import eventlet
 
+from oslo_log import log as logging
 from sqlalchemy.sql import expression as expr
+
 
 from neutron.api.v2 import attributes
 from neutron.common import exceptions as n_exc
 from neutron.db import models_v2
 from neutron.i18n import _LE, _LI, _LW
 from neutron import manager
-from neutron.openstack.common import log as logging
-from neutron.plugins.cisco.db.l3.device_handling_db import DeviceHandlingMixin
-import neutron.plugins.cisco.l3.plugging_drivers as plug
+from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
+    DeviceHandlingMixin)
+import networking_cisco.plugins.cisco.l3.plugging_drivers as plug
 from neutron.plugins.common import constants as svc_constants
 
 LOG = logging.getLogger(__name__)
