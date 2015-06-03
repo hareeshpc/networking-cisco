@@ -146,13 +146,14 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
 
     def setup_logical_port_connectivity(self, context, port_db,
                                         hosting_device_id):
-        """Establishes connectivity for a logical port."""
+        """Establishes connectivity for a logical port.
+
+        This is done by hot plugging the interface(VIF) corresponding to the
+        port from the CSR."""
+
         l3admin_tenant_id = DeviceHandlingMixin.l3_tenant_id()
         # Clear device_owner and device_id and set tenant_id to L3AdminTenant
         # to let interface-attach succeed
-        original_tenant_id = port_db['tenant_id']
-        original_device_id = port_db['device_id']
-        original_device_owner = port_db['device_owner']
         self._core_plugin.update_port(
             context.elevated(),
             port_db['id'],
@@ -161,44 +162,36 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                       'tenant_id': l3admin_tenant_id}})
         try:
             self.svc_vm_mgr.interface_attach(hosting_device_id, port_db['id'])
-            LOG.debug(_("Setup logical port completed for port:%s"), port_db[
+            LOG.debug("Setup logical port completed for port:%s", port_db[
                 'id'])
-        finally:
-            pass
-            # Enable below for setting tenant_id, device_id and device_owner
-            # back to original
-            # self._core_plugin.update_port(
-            #     context.elevated(),
-            #     port_db['id'],
-            #     {'port': {'tenant_id': original_tenant_id,
-            #               'device_id': original_device_id,
-            #               'device_owner': original_device_owner}})
+        except Exception as e:
+            LOG.error(_LE("Failed to attach interface corresponding to port:"
+                          "%(p_id)s on hosting device:%(hd_id)s due to "
+                          "error %(error)s"), {'p_id': port_db['id'],
+                                               'hd_id': hosting_device_id,
+                                               'error': str(e)})
 
     def teardown_logical_port_connectivity(self, context, port_db,
                                            hosting_device_id):
         """Removes connectivity for a logical port.
 
-        Unplugs the corresponding data interface from the CSR
+        This is done by hot unplugging the interface(VIF) corresponding to the
+        port from the CSR.
         """
-        l3admin_tenant_id = DeviceHandlingMixin.l3_tenant_id()
-        self._core_plugin.update_port(
-            context.elevated(),
-            port_db['id'],
-            {'port': {'tenant_id': l3admin_tenant_id,
-                      'device_id': hosting_device_id,
-                      'device_owner': 'compute:None'}})
-        self._core_plugin.update_port(
-            context.elevated(),
-            port_db['id'],
-            {'port': {'tenant_id': l3admin_tenant_id,
-                      'device_id': hosting_device_id,
-                      'device_owner': ''}})
+        if port_db is None or port_db.get('id') is None:
+            LOG.error(_LE("Port id is None! Cannot remove port "
+                          "from hosting_device:%s"), hosting_device_id)
+            return
         try:
             self.svc_vm_mgr.interface_detach(hosting_device_id, port_db['id'])
             LOG.debug("Done teardown logical port connectivity for port:%s",
                       port_db['id'])
         except Exception as e:
-            LOG.error(_LE("Exception %s"), e)
+            LOG.error(_LE("Failed to detach interface corresponding to port:"
+                          "%(p_id)s on hosting device:%(hd_id)s due to "
+                          "error %(error)s"), {'p_id': port_db['id'],
+                                               'hd_id': hosting_device_id,
+                                               'error': str(e)})
 
     def extend_hosting_port_info(self, context, port_db, hosting_info):
         """Extends hosting information for a logical port."""

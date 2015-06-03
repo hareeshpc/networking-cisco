@@ -495,7 +495,9 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
     def _populate_hosting_info_for_port(self, context, router_id, port,
                                         hosting_device, hosting_pdata,
                                         plugging_driver):
-        port_db = self._core_plugin._get_port(context, port['id'])
+        # Query elevated since the router port may be owned by a different
+        # tenant, e.g., for service VM
+        port_db = self._core_plugin._get_port(context.elevated(), port['id'])
         h_info = port_db.hosting_info
         new_allocation = False
         if h_info is None:

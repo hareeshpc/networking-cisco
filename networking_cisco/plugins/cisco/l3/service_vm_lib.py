@@ -14,7 +14,7 @@
 
 from novaclient import exceptions as nova_exc
 from novaclient import utils as n_utils
-from novaclient.v1_1 import client
+from novaclient.v2 import client
 from oslo_config import cfg
 from oslo_log import log as logging
 
