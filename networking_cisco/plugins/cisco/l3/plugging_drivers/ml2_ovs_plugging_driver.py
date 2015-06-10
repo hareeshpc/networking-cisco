@@ -1,4 +1,5 @@
 import eventlet
+eventlet.monkey_patch()
 
 from oslo_log import log as logging
 from sqlalchemy.sql import expression as expr
@@ -28,6 +29,9 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     The driver makes use of ML2 L2 API.
     """
 
+    def __init__(self):
+        self._gt_pool = eventlet.GreenPool()
+
     def retry(ExceptionToCheck, tries=4, delay=3, backoff=2):
         """Retry calling the decorated function using an exponential backoff.
 
@@ -50,8 +54,8 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                     try:
                         return f(*args, **kwargs)
                     except ExceptionToCheck, e:
-                        LOG.error(_("%(ex)s, Retrying in %(delay)d seconds.."),
-                                  {'ex': str(e), 'delay': mdelay})
+                        LOG.warn(_LW("%(ex)s, Retrying in %(delt)d seconds.."),
+                                  {'ex': str(e), 'delt': mdelay})
                         time.sleep(mdelay)
                         mtries -= 1
                         mdelay *= backoff
@@ -146,15 +150,19 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     @retry(c_exc.PortNotUnBoundException, tries=6)
     def _is_port_unbound(self, context, port_db):
         # Nova will unbind the port asynchronously after the unplug. So we need
-        # to expire the hosting port to fetch the updated info.
-        context.session.expire(port_db.hosting_info.hosting_port)
+        # to expire the port db to fetch the updated info.
+        context.session.expire(port_db)
         port_db = self._core_plugin._get_port(context, port_db.id)
-        hport = port_db.hosting_info.hosting_port
-        if hport['device_id'] == '' and hport['device_owner'] == '':
-            LOG.debug("Hosting port has been unbound. Proceed to delete it")
+        if port_db.device_id == '' and port_db.device_owner == '':
             return True
         else:
-            raise c_exc.PortNotUnBoundException(port_id=hport.id)
+            raise c_exc.PortNotUnBoundException(port_id=port_db.id)
+
+    def _cleanup_hosting_port(self, context, port_id):
+        port_db = self._core_plugin._get_port(context, port_id)
+        if self._is_port_unbound(context, port_db):
+            LOG.debug("Port:%s unbound. Going to delete it", port_db.name)
+            self._delete_resource_port(context, port_id)
 
     def setup_logical_port_connectivity(self, context, port_db,
                                         hosting_device_id):
@@ -169,7 +177,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                 self.svc_vm_mgr.interface_attach(
                     hosting_device_id, hosting_port.id)
                 LOG.debug("Setup logical port completed for port:%s",
-                          hosting_port.id)
+                          port_db.id)
             except Exception as e:
                 LOG.error(_LE("Failed to attach interface mapped to port:"
                               "%(p_id)s on hosting device:%(hd_id)s due to "
@@ -188,18 +196,18 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
             LOG.warning(_LW("Port id is None! Cannot remove port "
                             "from hosting_device:%s"), hosting_device_id)
             return
-        hosting_port = port_db.hosting_info.hosting_port
+        hosting_port_id = port_db.hosting_info.hosting_port.id
         try:
             self.svc_vm_mgr.interface_detach(hosting_device_id,
-                                             hosting_port.id)
-            if self._is_port_unbound(context, port_db):
-                self._delete_resource_port(context, hosting_port.id)
-                LOG.debug("Done teardown logical port connectivity for port:%s",
-                           port_db['id'])
+                                             hosting_port_id)
+            self._gt_pool.spawn_n(self._cleanup_hosting_port, context,
+                                  hosting_port_id)
+            LOG.debug("Teardown logicalport completed for port:%s", port_db.id)
+
         except Exception as e:
             LOG.error(_LE("Failed to detach interface corresponding to port:"
                           "%(p_id)s on hosting device:%(hd_id)s due to "
-                          "error %(error)s"), {'p_id': hosting_port.id,
+                          "error %(error)s"), {'p_id': hosting_port_id,
                                                'hd_id': hosting_device_id,
                                                'error': str(e)})
 
