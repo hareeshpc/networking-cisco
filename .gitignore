@@ -23,8 +23,9 @@ setuptools*.egg/
 *~
 /.*
 !/.coveragerc
-!/.gitignore
+!/..gitignore
 !/.gitreview
 !/.mailmap
 !/.pylintrc
 !/.testr.conf
+venv/*

@@ -392,3 +392,18 @@ GET_VNIC_MAPPING = """
     </oper-data-format-text-block>
 </filter>
 """
+
+#=================================================#
+# Configure interface mac
+# $(config)interface GigabitEthernet 2
+# $(config)mac-address fa:16:3e:ae:13:5a
+#=================================================#
+CONFIGURE_INTERFACE_MAC = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>mac-address %s</cmd>
+            <cmd>no shutdown</cmd>
+        </cli-config-data>
+</config>
+"""

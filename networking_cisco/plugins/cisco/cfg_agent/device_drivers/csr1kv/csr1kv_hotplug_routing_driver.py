@@ -65,8 +65,13 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
         if not interface_name:
             params = {'id': port['id'], 'mac': port['mac_address']}
             raise cfg_exc.CSR1kvMissingInterfaceException(**params)
+        self._configure_interface_mac(interface_name, port['mac_address'])
         self._configure_interface(interface_name, vrf_name,
                                   gateway_ip, netmask)
+
+    def _configure_interface_mac(self, if_name, mac):
+        confstr = snippets.CONFIGURE_INTERFACE_MAC % (if_name, mac)
+        self._edit_running_config(confstr, 'CONFIGURE_INTERFACE_MAC')
 
     def _configure_interface(self, if_name, vrf_name, ip, netmask):
         confstr = snippets.CONFIGURE_INTERFACE % (if_name, vrf_name,
@@ -85,7 +90,9 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
         self._edit_running_config(confstr, 'DECONFIGURE_INTERFACE')
 
     def _get_interface_name_from_hosting_port(self, port):
-        mac = netaddr.EUI(port['mac_address'])
+        # The VIF hotplugged into the CSR uses the hosting port, hence we take
+        # its mac to identify the interface
+        mac = netaddr.EUI(port['hosting_info']['hosting_mac'])
         mac_interface_dict = self._get_VNIC_mapping()
         if mac in mac_interface_dict:
             interface_name = mac_interface_dict[mac]
