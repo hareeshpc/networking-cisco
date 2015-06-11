@@ -482,22 +482,20 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
         a good place to allocate hosting ports to the router ports.
         """
         # cache of hosting port information: {mac_addr: {'name': port_name}}
-        hosting_pdata = {}
         if router['external_gateway_info'] is not None:
-            h_info, did_allocation = self._populate_hosting_info_for_port(
+            self._populate_hosting_info_for_port(
                 context, router['id'], router['gw_port'],
-                router['hosting_device'], hosting_pdata, plugging_driver)
+                router['hosting_device'], plugging_driver)
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
-            h_info, did_allocation = self._populate_hosting_info_for_port(
-                context, router['id'], itfc, router['hosting_device'],
-                hosting_pdata, plugging_driver)
+            self._populate_hosting_info_for_port(
+                context, router['id'], itfc,
+                router['hosting_device'], plugging_driver)
 
     def _populate_hosting_info_for_port(self, context, router_id, port,
-                                        hosting_device, hosting_pdata,
-                                        plugging_driver):
+                                        hosting_device, plugging_driver):
         # Query elevated since the router port may be owned by a different
         # tenant, e.g., for service VM
-        port_db = self._core_plugin._get_port(context.elevated(), port['id'])
+        port_db = self._core_plugin._get_port(context, port['id'])
         h_info = port_db.hosting_info
         new_allocation = False
         if h_info is None:
@@ -511,16 +509,11 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
                 return None, new_allocation
             else:
                 new_allocation = True
-        if hosting_pdata.get('mac') is None:
-            p_data = self._core_plugin.get_port(
-                context, h_info.hosting_port_id, ['mac_address', 'name'])
-            hosting_pdata['mac'] = p_data['mac_address']
-            hosting_pdata['name'] = p_data['name']
         # Including MAC address of hosting port so L3CfgAgent can easily
-        # determine which VM VIF to configure VLAN sub-interface on.
+        # determine which VIF the tenant network is available.
         port['hosting_info'] = {'hosting_port_id': h_info.hosting_port_id,
-                                'hosting_mac': hosting_pdata.get('mac'),
-                                'hosting_port_name': hosting_pdata.get('name')}
+                                'hosting_mac': h_info.hosting_port.mac_address,
+                                'hosting_port_name': h_info.hosting_port.name}
         plugging_driver.extend_hosting_port_info(
             context, port_db, port['hosting_info'])
         return h_info, new_allocation
