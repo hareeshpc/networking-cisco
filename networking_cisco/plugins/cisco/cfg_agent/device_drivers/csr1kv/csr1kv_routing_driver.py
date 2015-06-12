@@ -161,8 +161,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
         vrf_name = self._csr_get_vrf_name(ri)
-        in_vlan = self._get_interface_vlan_from_hosting_port(port)
-        acl_no = 'acl_' + str(in_vlan)
+        num = self._generate_acl_num_from_hosting_port(port)
+        acl_no = 'acl_' + str(num)
         internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
@@ -177,8 +177,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         #First disable nat in all inner ports
         for port in ports:
             in_intfc_name = self._get_interface_name_from_hosting_port(port)
-            inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-            acls.append("acl_" + str(inner_vlan))
+            num = self._generate_acl_num_from_hosting_port(port)
+            acls.append("acl_" + str(num))
             self._remove_interface_nat(in_intfc_name, 'inside')
 
         #Wait for two second
@@ -277,8 +277,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         intfc_name = 'GigabitEthernet%s.%s' % (int_no, vlan)
         return intfc_name
 
-    @staticmethod
-    def _get_interface_vlan_from_hosting_port(port):
+    def _generate_acl_num_from_hosting_port(self, port):
+        # In the case of the N1kv driver, we use the vlan of the tenant netwk
         return port['hosting_info']['segmentation_id']
 
     @staticmethod

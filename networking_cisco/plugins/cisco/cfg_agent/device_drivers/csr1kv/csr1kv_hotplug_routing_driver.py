@@ -100,6 +100,11 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
                          "is %(name)s"), {'mac': mac, 'name': interface_name})
             return interface_name
 
+    def _generate_acl_num_from_hosting_port(self, port):
+        # In the case of the hotplug driver, we use the interface number
+        intfc_name = self._get_interface_name_from_hosting_port(port)
+        return intfc_name.lstrip("GigabitEthernet")
+
     def _get_VNIC_mapping(self):
         """ Returns a dict of mac addresses(EUI format) and interface names"""
         conn = self._get_connection()
