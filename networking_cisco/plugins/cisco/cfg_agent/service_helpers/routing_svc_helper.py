@@ -452,7 +452,7 @@ class RoutingServiceHelper(object):
         except cfg_exceptions.DriverException as e:
             with excutils.save_and_reraise_exception():
                 self.updated_routers.update([ri.router_id])
-                LOG.error(_LE(e))
+                LOG.error(e)
 
     def _process_router_floating_ips(self, ri, ex_gw_port):
         """Process a router's floating ips.

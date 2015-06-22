@@ -122,9 +122,9 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
             # no need to schedule now since we're only doing this to
             # tear-down connectivity and there won't be any if not
             # already scheduled.
-            r_hd_binding = self._get_router_binding_info(e_context, id)   
+            r_hd_binding = self._get_router_binding_info(e_context, id)
             self._add_type_and_hosting_device_info(
-                    e_context, o_r, binding_info=r_hd_binding, schedule=False)
+                e_context, o_r, binding_info=r_hd_binding, schedule=False)
             p_drv = self.get_hosting_device_plugging_driver()
             if p_drv is not None:
                 p_drv.teardown_logical_port_connectivity(

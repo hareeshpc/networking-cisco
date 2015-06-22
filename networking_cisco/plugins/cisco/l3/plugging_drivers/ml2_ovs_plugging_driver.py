@@ -1,3 +1,17 @@
+# Copyright 2015 Cisco Systems, Inc.  All rights reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -5,20 +19,21 @@ from oslo_log import log as logging
 from sqlalchemy.sql import expression as expr
 
 import networking_cisco.plugins.cisco.common.cisco_exceptions as c_exc
+from networking_cisco.plugins.cisco.common import utils
 from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
     DeviceHandlingMixin)
 import networking_cisco.plugins.cisco.l3.plugging_drivers as plug
-from networking_cisco.plugins.cisco.common import utils
 from neutron.api.v2 import attributes
 from neutron.common import exceptions as n_exc
 from neutron.db import models_v2
-from neutron.i18n import _LE, _LI, _LW
+from neutron.i18n import _LE, _LW
 from neutron import manager
 from neutron.plugins.common import constants as svc_constants
 
 LOG = logging.getLogger(__name__)
 
 DELETION_ATTEMPTS = 4
+
 
 class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     """Driver class for service VMs used with the ML2 OVS plugin.
@@ -71,7 +86,6 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     def get_hosting_device_resources(self, context, id, complementary_id,
                                      tenant_id, mgmt_nw_id):
         """Returns information about all resources for a hosting device."""
-        ports, nets, subnets = [], [], []
         mgmt_port = None
         # Ports for hosting device may not yet have 'device_id' set to
         # Nova assigned uuid of VM instance. However, those ports will still
@@ -95,7 +109,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
         if mgmt_port is not None:
             try:
                 self._delete_resource_port(context, mgmt_port['id'])
-            except n_exc.NeutronException, e:
+            except n_exc.NeutronException as e:
                 LOG.error(_("Unable to delete port:%(port)s after %(tries)d"
                             " attempts due to exception %(exception)s. "
                             "Skipping it"), {'port': mgmt_port['id'],
@@ -133,7 +147,8 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
         """Establishes connectivity for a logical port.
 
         This is done by hot plugging the interface(VIF) corresponding to the
-        port from the CSR."""
+        port from the CSR.
+        """
 
         hosting_port = port_db.hosting_info.hosting_port
         if hosting_port:

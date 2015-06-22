@@ -1,5 +1,18 @@
+# Copyright 2015 Cisco Systems, Inc.  All rights reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
 import mock
-import testtools
 
 from neutron.common import exceptions as n_exc
 from neutron.openstack.common import log as logging
@@ -49,7 +62,7 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
             ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
             ml2_ovs_plugging_driver._delete_resource_port(mock_ctx,
                                                           mgmt_port_id)
-            self.assertEquals(3, mocked_plugin.delete_port.call_count)
+            self.assertEqual(3, mocked_plugin.delete_port.call_count)
 
     # @testtools.skip("temp")
     def test_delete_resource_port_handle_port_not_found(self):
@@ -63,7 +76,7 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
             ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
             ml2_ovs_plugging_driver._delete_resource_port(mock_ctx,
                                                           mgmt_port_id)
-            self.assertEquals(1, mocked_plugin.delete_port.call_count)
+            self.assertEqual(1, mocked_plugin.delete_port.call_count)
 
     @mock.patch.object(DeviceHandlingMixin, 'l3_tenant_id')
     def test_setup_logical_port_connectivity(self, mock_l3tenant):
@@ -126,4 +139,3 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
             self.assertEqual(1, mock_delete_resources.call_count)
             self.assertEqual(None, result['mgmt_port'])
             self.assertEqual([], result['ports'])
-
