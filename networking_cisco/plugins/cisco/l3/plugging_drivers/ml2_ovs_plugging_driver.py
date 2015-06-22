@@ -4,24 +4,21 @@ eventlet.monkey_patch()
 from oslo_log import log as logging
 from sqlalchemy.sql import expression as expr
 
-
-from neutron.api.v2 import attributes
-from neutron.common import exceptions as n_exc
 import networking_cisco.plugins.cisco.common.cisco_exceptions as c_exc
-from neutron.db import models_v2
-from neutron.i18n import _LE, _LI, _LW
-from neutron import manager
 from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
     DeviceHandlingMixin)
 import networking_cisco.plugins.cisco.l3.plugging_drivers as plug
+from networking_cisco.plugins.cisco.common import utils
+from neutron.api.v2 import attributes
+from neutron.common import exceptions as n_exc
+from neutron.db import models_v2
+from neutron.i18n import _LE, _LI, _LW
+from neutron import manager
 from neutron.plugins.common import constants as svc_constants
 
 LOG = logging.getLogger(__name__)
 
 DELETION_ATTEMPTS = 4
-
-import time
-from functools import wraps
 
 class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     """Driver class for service VMs used with the ML2 OVS plugin.
@@ -31,39 +28,6 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
 
     def __init__(self):
         self._gt_pool = eventlet.GreenPool()
-
-    def retry(ExceptionToCheck, tries=4, delay=3, backoff=2):
-        """Retry calling the decorated function using an exponential backoff.
-
-        Reference: http://www.saltycrane.com/blog/2009/11/trying-out-retry
-        -decorator-python/
-
-        :param ExceptionToCheck: the exception to check. may be a tuple of
-            exceptions to check
-        :param tries: number of times to try (not retry) before giving up
-        :param delay: initial delay between retries in seconds
-        :param backoff: backoff multiplier e.g. value of 2 will double the delay
-            each retry
-        """
-
-        def deco_retry(f):
-            @wraps(f)
-            def f_retry(*args, **kwargs):
-                mtries, mdelay = tries, delay
-                while mtries > 1:
-                    try:
-                        return f(*args, **kwargs)
-                    except ExceptionToCheck, e:
-                        LOG.warn(_LW("%(ex)s, Retrying in %(delt)d seconds.."),
-                                  {'ex': str(e), 'delt': mdelay})
-                        time.sleep(mdelay)
-                        mtries -= 1
-                        mdelay *= backoff
-                return f(*args, **kwargs)
-
-            return f_retry  # true decorator
-
-        return deco_retry
 
     @property
     def _core_plugin(self):
@@ -138,7 +102,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                                              'tries': DELETION_ATTEMPTS,
                                              'exception': str(e)})
 
-    @retry(n_exc.NeutronException, DELETION_ATTEMPTS, 1)
+    @utils.retry(n_exc.NeutronException, DELETION_ATTEMPTS, 1)
     def _delete_resource_port(self, context, port_id):
         try:
             self._core_plugin.delete_port(context, port_id)
@@ -147,7 +111,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
             LOG.warning(_('Trying to delete port:%s, but port not found'),
                         port_id)
 
-    @retry(c_exc.PortNotUnBoundException, tries=6)
+    @utils.retry(c_exc.PortNotUnBoundException, tries=6)
     def _is_port_unbound(self, context, port_db):
         # Nova will unbind the port asynchronously after the unplug. So we need
         # to expire the port db to fetch the updated info.
