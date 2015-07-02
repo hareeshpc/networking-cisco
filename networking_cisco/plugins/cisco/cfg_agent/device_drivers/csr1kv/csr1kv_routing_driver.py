@@ -277,9 +277,12 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         intfc_name = 'GigabitEthernet%s.%s' % (int_no, vlan)
         return intfc_name
 
+    def _get_interface_vlan_from_hosting_port(self, port):
+        return port['hosting_info']['segmentation_id']
+
     def _generate_acl_num_from_hosting_port(self, port):
         # In the case of the N1kv driver, we use the vlan of the tenant netwk
-        return port['hosting_info']['segmentation_id']
+        return self._get_interface_vlan_from_hosting_port(port)
 
     @staticmethod
     def _get_interface_no_from_hosting_port(port):
