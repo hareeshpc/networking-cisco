@@ -89,3 +89,7 @@ class CiscoRouterPlugin(common_db_mixin.CommonDbMixin,
         except AttributeError:
             self._plugin = manager.NeutronManager.get_plugin()
             return self._plugin
+
+    def notify_routers_updated(self, context, router_ids):
+        #ToDo(Hareesh): Figure out whats to be done.
+        pass
