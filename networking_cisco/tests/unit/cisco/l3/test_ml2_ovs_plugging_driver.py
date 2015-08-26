@@ -15,13 +15,14 @@
 import mock
 
 from neutron.common import exceptions as n_exc
-from neutron.openstack.common import log as logging
 from neutron.tests import base
+from oslo_log import log as logging
 
-from neutron.plugins.cisco.db.l3.device_handling_db import DeviceHandlingMixin
-from neutron.plugins.cisco.l3.plugging_drivers.ml2_ovs_plugging_driver import(
-    ML2OVSPluggingDriver)
-
+from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
+    DeviceHandlingMixin)
+from networking_cisco.plugins.cisco.l3.plugging_drivers.ml2_ovs_plugging_driver \
+    import ML2OVSPluggingDriver
+from neutron import manager
 
 LOG = logging.getLogger(__name__)
 
@@ -80,21 +81,22 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
 
     @mock.patch.object(DeviceHandlingMixin, 'l3_tenant_id')
     def test_setup_logical_port_connectivity(self, mock_l3tenant):
-        mock_portdb = {'id': 'fake_port_id',
-                       'tenant_id': 'fake_tenant_id',
-                       'device_id': 'fake_device_id',
-                       'device_owner': 'fake_device_owner'}
+        hosting_port_obj = mock.MagicMock(id='hosting_port_id')
+        hosting_info_obj = mock.MagicMock(hosting_port=hosting_port_obj)
+        mock_portdb = mock.MagicMock(hosting_info=hosting_info_obj)
+
         hosting_device_id = 'fake_hosting_device_id'
         mocked_plugin = mock.MagicMock()
         mock_ctx = mock.MagicMock()
         with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
             ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
-            ml2_ovs_plugging_driver._svc_vm_mgr = mock.MagicMock()
+            manager.NeutronManager = mock.MagicMock()
             ml2_ovs_plugging_driver.setup_logical_port_connectivity(
                 mock_ctx, mock_portdb, hosting_device_id)
-            ml2_ovs_plugging_driver._svc_vm_mgr.interface_attach\
-                .assert_called_once_with(hosting_device_id, mock_portdb['id'])
+            ml2_ovs_plugging_driver.svc_vm_mgr.interface_attach\
+                .assert_called_once_with(hosting_device_id,
+                mock_portdb.hosting_info.hosting_port.id)
 
     def test_create_hosting_device_resources(self):
         complementary_id = 'fake_complementary_id'
