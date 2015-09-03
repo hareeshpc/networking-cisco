@@ -22,7 +22,7 @@ from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     csr1kv_hotplug_routing_driver as csr_driver)
-from neutron.openstack.common import uuidutils
+from oslo_utils import uuidutils
 
 sys.modules['ncclient'] = mock.MagicMock()
 sys.modules['ciscoconfparse'] = mock.MagicMock()
@@ -55,8 +55,10 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
         self.mac = 'be:ef:de:ad:be:ef'
         self.ex_gw_mac = 'ca:fe:de:ad:be:ef'
         self.ex_gw_int = 'GigabitEthernet1'
+        self.hosting_port_name = 'hostingport_12345'
         self.port['mac_address'] = self.mac
         self.port['hosting_info']['hosting_mac'] = self.mac
+        self.port['hosting_info']['hosting_port_name'] = self.hosting_port_name
         self.ex_gw_netmask = netaddr.IPNetwork(self.ex_gw_cidr).netmask
         self.ex_gw_port['hosting_info']['hosting_mac'] = self.ex_gw_mac
         ret_VNIC = {netaddr.EUI(self.mac): self.interface,
@@ -111,12 +113,13 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
         self.driver._nat_rules_for_internet_access = mock.MagicMock()
         int_interface = 'GigabitEthernet0'
         ext_interface = 'GigabitEthernet1'
-        args = (('acl_' + int_interface.lstrip("GigabitEthernet")),
+        args = (('acl_' + self.hosting_port_name.lstrip("hostingport_")),
                 netaddr.IPNetwork(self.gw_ip_cidr).network,
                 netaddr.IPNetwork(self.gw_ip_cidr).hostmask,
                 int_interface,
                 ext_interface,
-                self.vrf)
+                self.vrf,
+                self.ex_gw_ip)
 
         self.driver.enable_internal_network_NAT(self.ri, self.port,
                                                 self.ex_gw_port)
@@ -129,7 +132,8 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
         self.driver._check_acl = mock.Mock(return_value=False)
         int_interface = 'GigabitEthernet0'
         ext_interface = 'GigabitEthernet1'
-        acl_no = ('acl_' + int_interface.lstrip("GigabitEthernet"))
+        acl_no = ('acl_' + self.hosting_port_name.lstrip("hostingport_"))
+        pool_name = ('pool_' + self.hosting_port_name.lstrip("hostingport_"))
         int_network = netaddr.IPNetwork(self.gw_ip_cidr).network
         int_net_mask = netaddr.IPNetwork(self.gw_ip_cidr).hostmask
 
@@ -139,7 +143,7 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
         self.assert_edit_running_config(
             snippets.CREATE_ACL, (acl_no, int_network, int_net_mask))
         self.assert_edit_running_config(
-            snippets.SET_DYN_SRC_TRL_INTFC, (acl_no, ext_interface, self.vrf))
+            snippets.SET_DYN_SRC_TRL_POOL, (acl_no, pool_name, self.vrf))
         self.assert_edit_running_config(
             snippets.SET_NAT, (int_interface, 'inside'))
         self.assert_edit_running_config(
@@ -153,7 +157,7 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
         ext_interface = 'GigabitEthernet1'
         self.driver.disable_internal_network_NAT(self.ri, self.port,
                                                  self.ex_gw_port)
-        args = (('acl_' + int_interface.lstrip("GigabitEthernet")),
+        args = (('acl_' + self.hosting_port_name.lstrip("hostingport_")),
                ext_interface, self.vrf)
 
         self.driver._remove_interface_nat.assert_called_once_with(
@@ -164,8 +168,8 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
     def test_disable_internal_network_NAT_with_confstring(self):
         self.driver._cfg_exists = mock.Mock(return_value=True)
         int_interface = 'GigabitEthernet0'
-        ext_interface = 'GigabitEthernet1'
-        acl_no = 'acl_' + int_interface.lstrip("GigabitEthernet")
+        acl_no = 'acl_' + self.hosting_port_name.lstrip("hostingport_")
+        pool_name = 'pool_' + self.hosting_port_name.lstrip("hostingport_")
         self.driver.disable_internal_network_NAT(self.ri, self.port,
                                                  self.ex_gw_port)
 
@@ -173,8 +177,8 @@ class TestCSR1kvHotplug(test_csr1kv_routing_driver.TestCSR1kvRouting):
             snippets.REMOVE_NAT, (int_interface, 'inside'))
         self.assert_edit_running_config(snippets.CLEAR_DYN_NAT_TRANS, None)
         self.assert_edit_running_config(
-            snippets.REMOVE_DYN_SRC_TRL_INTFC, (acl_no, ext_interface,
-                                                self.vrf))
+            snippets.REMOVE_DYN_SRC_TRL_POOL, (acl_no, pool_name,
+                                               self.vrf))
         self.assert_edit_running_config(snippets.REMOVE_ACL, acl_no)
 
     def test_floatingip(self):

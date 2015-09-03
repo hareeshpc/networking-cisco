@@ -220,7 +220,6 @@ REMOVE_ACL = """
 #    ..........interface GigabitEthernet3.100 vrf nrouter-e7d4y5 overload
 #========================================================================#
 SNAT_CFG = "ip nat inside source list %s interface %s vrf %s overload"
-
 SET_DYN_SRC_TRL_INTFC = """
 <config>
         <cli-config-data>
@@ -406,4 +405,78 @@ CONFIGURE_INTERFACE_MAC = """
             <cmd>no shutdown</cmd>
         </cli-config-data>
 </config>
+"""
+
+#=========================================================================#
+# Create nat pool
+# Syntax: ip nat pool <pool_name> <source_ip> <dest_ip> prefix-length <30>
+# eg: $(config)ip nat poolName 1.2.3.4 1.2.3.4 prefix 30
+#========================================================================#
+SET_NAT_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat pool %s %s %s prefix-length %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Remove nat pool
+# Syntax: no ip nat pool <pool_name>
+# eg: $(config)no ip nat poolName
+#========================================================================#
+REMOVE_NAT_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat pool %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Set Dynamic source translation on a nat pool
+# Syntax: ip nat inside source list <acl_no> pool <pool_name>
+# .......vrf <vrf_name> overload
+# eg: $(config)ip nat inside source list acl_500
+#    ..........pool pool_nrouter-e7d4y5 vrf nrouter-e7d4y5 overload
+#========================================================================#
+SNAT_POOL_CFG = "ip nat inside source list %s pool %s vrf %s overload"
+SET_DYN_SRC_TRL_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat inside source list %s pool %s vrf %s overload</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Remove Dynamic source translation on a nat pool
+# Syntax: no ip nat inside source list <acl_no> pool <pool_name>
+# .......vrf <vrf_name> overload
+# eg: $(config)no ip nat inside source list acl_500
+#    ..........pool pool_nrouter-e7d4y5 vrf nrouter-e7d4y5 overload
+#========================================================================#
+REMOVE_DYN_SRC_TRL_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat inside source list %s pool %s vrf %s overload</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=============================================================================#
+# Save the router configuration to NVRAM
+# Syntax: wr mem
+#=============================================================================#
+WR_MEM = """
+<filter>
+        <oper-data-format-text-block>
+            <exec>wr mem</exec>
+        </oper-data-format-text-block>
+</filter>
+
 """

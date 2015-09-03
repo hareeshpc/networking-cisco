@@ -358,6 +358,10 @@ class RoutingServiceHelper(object):
         :return: None
         """
         try:
+            if not routers and removed_routers:
+                for router in removed_routers:
+                    self._router_removed(router['id'], False)
+                return
             if all_routers:
                 prev_router_ids = set(self.router_info)
             else:

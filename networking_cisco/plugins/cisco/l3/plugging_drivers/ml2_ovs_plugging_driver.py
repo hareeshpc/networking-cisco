@@ -15,10 +15,10 @@
 import eventlet
 eventlet.monkey_patch()
 
+from novaclient import exceptions as nova_exc
 from oslo_log import log as logging
 from sqlalchemy.sql import expression as expr
 
-import networking_cisco.plugins.cisco.common.cisco_exceptions as c_exc
 from networking_cisco.plugins.cisco.common import utils
 from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
     DeviceHandlingMixin)
@@ -33,6 +33,10 @@ from neutron.plugins.common import constants as svc_constants
 LOG = logging.getLogger(__name__)
 
 DELETION_ATTEMPTS = 4
+
+
+class PortNotUnBoundException(n_exc.InUse):
+    message = _("Port: %(port_id)s not unbound yet.")
 
 
 class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
@@ -73,6 +77,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                 'device_owner': complementary_id}}
             try:
                 mgmt_port = self._core_plugin.create_port(context, p_spec)
+
             except n_exc.NeutronException as e:
                 LOG.error(_('Error %s when creating management port. '
                             'Cleaning up.'), e)
@@ -86,6 +91,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
     def get_hosting_device_resources(self, context, id, complementary_id,
                                      tenant_id, mgmt_nw_id):
         """Returns information about all resources for a hosting device."""
+        ports, nets = [], []
         mgmt_port = None
         # Ports for hosting device may not yet have 'device_id' set to
         # Nova assigned uuid of VM instance. However, those ports will still
@@ -97,10 +103,12 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
             models_v2.Port.device_owner == complementary_id))
         for port in query:
             if port['network_id'] != mgmt_nw_id:
-                raise Exception
+                ports.append(port)
+                nets.append({'id': port['network_id']})
             else:
                 mgmt_port = port
-        return {'mgmt_port': mgmt_port}
+        return {'mgmt_port': mgmt_port,
+                'ports': ports, 'networks': nets}
 
     def delete_hosting_device_resources(self, context, tenant_id, mgmt_port,
                                         **kwargs):
@@ -125,7 +133,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
             LOG.warning(_('Trying to delete port:%s, but port not found'),
                         port_id)
 
-    @utils.retry(c_exc.PortNotUnBoundException, tries=6)
+    @utils.retry(PortNotUnBoundException, tries=6)
     def _is_port_unbound(self, context, port_db):
         # Nova will unbind the port asynchronously after the unplug. So we need
         # to expire the port db to fetch the updated info.
@@ -134,13 +142,29 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
         if port_db.device_id == '' and port_db.device_owner == '':
             return True
         else:
-            raise c_exc.PortNotUnBoundException(port_id=port_db.id)
+            raise PortNotUnBoundException(port_id=port_db.id)
 
     def _cleanup_hosting_port(self, context, port_id):
+        # Needs a bit of time for gateway port to unbind
+        eventlet.sleep(2)
         port_db = self._core_plugin._get_port(context, port_id)
         if self._is_port_unbound(context, port_db):
             LOG.debug("Port:%s unbound. Going to delete it", port_db.name)
             self._delete_resource_port(context, port_id)
+
+    def _attach_hosting_port(self, hosting_device_id, hosting_port_id):
+        # Give a little bit of time for CSR to get out of vm building state
+        eventlet.sleep(10)
+        try:
+            self.svc_vm_mgr.interface_attach(
+                hosting_device_id, hosting_port_id)
+            LOG.debug("_attach_hosting_port Setup logical port completed")
+        except Exception as e:
+            LOG.error(_LE("_attach_hosting_port Failed to attach interface:"
+                          "%(p_id)s on hosting device:%(hd_id)s due to "
+                          "error %(error)s"), {'p_id': hosting_port_id,
+                                               'hd_id': hosting_device_id,
+                                               'error': str(e)})
 
     def setup_logical_port_connectivity(self, context, port_db,
                                         hosting_device_id):
@@ -149,7 +173,6 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
         This is done by hot plugging the interface(VIF) corresponding to the
         port from the CSR.
         """
-
         hosting_port = port_db.hosting_info.hosting_port
         if hosting_port:
             try:
@@ -157,6 +180,12 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                     hosting_device_id, hosting_port.id)
                 LOG.debug("Setup logical port completed for port:%s",
                           port_db.id)
+            except nova_exc.Conflict as e:
+                # CSR is still in vm_state building
+                LOG.debug("Failed to attach interface - spawn thread "
+                          "error %(error)s", {'error': str(e)})
+                self._gt_pool.spawn_n(self._attach_hosting_port,
+                                      hosting_device_id, hosting_port.id)
             except Exception as e:
                 LOG.error(_LE("Failed to attach interface mapped to port:"
                               "%(p_id)s on hosting device:%(hd_id)s due to "
@@ -210,7 +239,8 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                   'mac_address': attributes.ATTR_NOT_SPECIFIED,
                   'fixed_ips': [],
                   'device_id': '',
-                  'device_owner': ''}}
+                  'device_owner': '',
+                  'port_security_enabled': False}}
         try:
             hosting_port = self._core_plugin.create_port(context, p_spec)
         except n_exc.NeutronException as e:

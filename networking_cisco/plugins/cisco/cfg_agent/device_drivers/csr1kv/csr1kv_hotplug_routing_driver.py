@@ -21,25 +21,30 @@ import xml.etree.ElementTree as ET
 from networking_cisco.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
 from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
-from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
-    csr1kv_routing_driver as driver)
+from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv.\
+    csr1kv_routing_driver import CSR1kvRoutingDriver
+from networking_cisco.plugins.cisco.cfg_agent.device_drivers.csr1kv.\
+    csr1kv_routing_driver import save_config
 from neutron.i18n import _LI
 
 LOG = logging.getLogger(__name__)
 
 
-class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
+class CSR1kvHotPlugRoutingDriver(CSR1kvRoutingDriver):
     """CSR1kv Hotplugging Routing Driver."""
 
     def __init__(self, **device_params):
         super(CSR1kvHotPlugRoutingDriver, self).__init__(**device_params)
 
+    @save_config
     def internal_network_added(self, ri, port):
         self._csr_configure_interface(ri, port)
 
+    @save_config
     def internal_network_removed(self, ri, port):
         self._csr_deconfigure_interface(port)
 
+    @save_config
     def external_gateway_added(self, ri, ex_gw_port):
         self._csr_configure_interface(ri, ex_gw_port)
         ex_gw_ip = ex_gw_port['subnets'][0]['gateway_ip']
@@ -47,6 +52,7 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
             # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
 
+    @save_config
     def external_gateway_removed(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnets'][0]['gateway_ip']
         if ex_gw_ip:
@@ -102,8 +108,8 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
 
     def _generate_acl_num_from_hosting_port(self, port):
         # In the case of the hotplug driver, we use the interface number
-        intfc_name = self._get_interface_name_from_hosting_port(port)
-        return intfc_name.lstrip("GigabitEthernet")
+        hosting_port_name = port['hosting_info']['hosting_port_name']
+        return hosting_port_name.lstrip("hostingport_")
 
     def _get_VNIC_mapping(self):
         """Returns a dict of mac addresses(EUI format) and interface names"""
@@ -134,3 +140,94 @@ class CSR1kvHotPlugRoutingDriver(driver.CSR1kvRoutingDriver):
         reparsed = minidom.parseString(rough_string)
         res = reparsed.toprettyxml(indent="\t")
         return res
+
+    def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        num = self._generate_acl_num_from_hosting_port(port)
+        acl_no = 'acl_' + str(num)
+        internal_cidr = port['ip_cidr']
+        internal_net = netaddr.IPNetwork(internal_cidr).network
+        netmask = netaddr.IPNetwork(internal_cidr).hostmask
+        outer_ip = ex_port['fixed_ips'][0]['ip_address']
+        inner_intfc = self._get_interface_name_from_hosting_port(port)
+        outer_intfc = self._get_interface_name_from_hosting_port(ex_port)
+        self._nat_rules_for_internet_access(acl_no, internal_net,
+                                            netmask, inner_intfc,
+                                            outer_intfc, vrf_name,
+                                            outer_ip)
+
+    def _nat_rules_for_internet_access(self, acl_no, network,
+                                       netmask,
+                                       inner_intfc,
+                                       outer_intfc,
+                                       vrf_name,
+                                       outer_ip):
+        """Configure the NAT rules for an internal network.
+
+        Configuring NAT rules in the CSR1kv is a three step process. First
+        create an ACL for the IP range of the internal network. Then enable
+        dynamic source NATing on the external interface of the CSR for this
+        ACL and VRF of the neutron router. Finally enable NAT on the
+        interfaces of the CSR where the internal and external networks are
+        connected.
+
+        :param acl_no: ACL number of the internal network.
+        :param network: internal network
+        :param netmask: netmask of the internal network.
+        :param inner_intfc: (name of) interface connected to the internal
+        network
+        :param outer_intfc: (name of) interface connected to the external
+        network
+        :param vrf_name: VRF corresponding to this virtual router
+        :return: True if configuration succeeded
+        :raises: networking_cisco.plugins.cisco.cfg_agent.cfg_exceptions.
+        CSR1kvConfigException
+        """
+        conn = self._get_connection()
+        # Duplicate ACL creation throws error, so checking
+        # it first. Remove it in future as this is not common in production
+        acl_present = self._check_acl(acl_no, network, netmask)
+        if not acl_present:
+            confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'CREATE_ACL')
+
+        #remove acl_ prefix from acl_no to get the hosting port id
+        pool_name = 'pool_' + acl_no.lstrip('acl_')
+        confstr = snippets.SET_NAT_POOL % (pool_name, outer_ip,
+                                           outer_ip, '30')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT_POOL')
+
+        confstr = snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name,
+                                                   vrf_name)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'CREATE_SNAT_POOL')
+
+        confstr = snippets.SET_NAT % (inner_intfc, 'inside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+        confstr = snippets.SET_NAT % (outer_intfc, 'outside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+    def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name):
+        conn = self._get_connection()
+        #remove acl_ prefix from acl_no to get the hosting port id
+        pool_name = 'pool_' + acl_no.lstrip('acl_')
+        confstr = snippets.SNAT_POOL_CFG % (acl_no, pool_name, vrf_name)
+        if self._cfg_exists(confstr):
+            confstr = snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no,
+                                                          pool_name,
+                                                          vrf_name)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_POOL')
+
+        confstr = snippets.REMOVE_NAT_POOL % pool_name
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT_POOL')
+
+        confstr = snippets.REMOVE_ACL % acl_no
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_ACL')

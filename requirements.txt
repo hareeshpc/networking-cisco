@@ -8,4 +8,3 @@ ncclient>=0.4.2
 lxml>=3.3.3
 UcsSdk<=0.8.2
 ciscoconfparse>=1.2.10
--e git://git.openstack.org/openstack/neutron.git#egg=neutron
