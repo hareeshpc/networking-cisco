@@ -18,19 +18,16 @@ from neutron.common import exceptions as n_exc
 from neutron.tests import base
 from oslo_log import log as logging
 
-from networking_cisco.plugins.cisco.db.l3.device_handling_db import (
-    DeviceHandlingMixin)
-from networking_cisco.plugins.cisco.l3.plugging_drivers.ml2_ovs_plugging_driver \
-    import(ML2OVSPluggingDriver)
-from neutron import manager
+from networking_cisco.plugins.cisco.l3.plugging_drivers.vif_hotplug_plugging_driver \
+    import(VIFHotPlugPluggingDriver)
 
 LOG = logging.getLogger(__name__)
 
 
-class TestMl2OvsPluggingDriver(base.BaseTestCase):
+class TestVIFHotPlugPluggingDriver(base.BaseTestCase):
 
     def setUp(self):
-        super(TestMl2OvsPluggingDriver, self).setUp()
+        super(TestVIFHotPlugPluggingDriver, self).setUp()
 
     # @testtools.skip("temp")
     def test_delete_resource_port_fail_always(self):
@@ -40,10 +37,10 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
         mocked_plugin.delete_port = mock.MagicMock(
             side_effect=n_exc.NeutronException)
 
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as \
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as \
                 plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             self.assertRaises(
                 n_exc.NeutronException,
                 ml2_ovs_plugging_driver._delete_resource_port,
@@ -58,9 +55,9 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
         mocked_plugin.delete_port = mock.MagicMock(
             side_effect=[n_exc.NeutronException, n_exc.NeutronException,
                          mock.Mock])
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             ml2_ovs_plugging_driver._delete_resource_port(mock_ctx,
                                                           mgmt_port_id)
             self.assertEqual(3, mocked_plugin.delete_port.call_count)
@@ -72,14 +69,14 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
         mock_ctx = mock.MagicMock()
         mocked_plugin.delete_port = mock.MagicMock(
             side_effect=n_exc.PortNotFound(port_id=mgmt_port_id))
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             ml2_ovs_plugging_driver._delete_resource_port(mock_ctx,
                                                           mgmt_port_id)
             self.assertEqual(1, mocked_plugin.delete_port.call_count)
 
-    @mock.patch.object(ML2OVSPluggingDriver, 'svc_vm_mgr')
+    @mock.patch.object(VIFHotPlugPluggingDriver, 'svc_vm_mgr')
     def test_setup_logical_port_connectivity(self, mock_svc_vm_mgr):
         hosting_port_obj = mock.MagicMock(id='hosting_port_id')
         hosting_info_obj = mock.MagicMock(hosting_port=hosting_port_obj)
@@ -88,10 +85,9 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
         hosting_device_id = 'fake_hosting_device_id'
         mocked_plugin = mock.MagicMock()
         mock_ctx = mock.MagicMock()
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
-            # manager.NeutronManager = mock.MagicMock()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             ml2_ovs_plugging_driver.setup_logical_port_connectivity(
                 mock_ctx, mock_portdb, hosting_device_id)
             ml2_ovs_plugging_driver.svc_vm_mgr.interface_attach\
@@ -106,9 +102,9 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
         max_hosted = 'fake_max_hosted'
         mocked_plugin = mock.MagicMock()
         mock_ctx = mock.MagicMock()
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             ml2_ovs_plugging_driver.create_hosting_device_resources(
                 mock_ctx, complementary_id, tenant_id, mgmt_nw_id,
                 mgmt_sec_grp_id, max_hosted)
@@ -127,9 +123,9 @@ class TestMl2OvsPluggingDriver(base.BaseTestCase):
             side_effect=n_exc.NeutronException)
 
         mock_ctx = mock.MagicMock()
-        with mock.patch.object(ML2OVSPluggingDriver, '_core_plugin') as plugin:
+        with mock.patch.object(VIFHotPlugPluggingDriver, '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
-            ml2_ovs_plugging_driver = ML2OVSPluggingDriver()
+            ml2_ovs_plugging_driver = VIFHotPlugPluggingDriver()
             ml2_ovs_plugging_driver.delete_hosting_device_resources = (
                 mock_delete_resources)
             result = ml2_ovs_plugging_driver.create_hosting_device_resources(

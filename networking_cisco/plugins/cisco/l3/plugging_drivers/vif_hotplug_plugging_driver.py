@@ -33,16 +33,15 @@ from neutron.plugins.common import constants as svc_constants
 LOG = logging.getLogger(__name__)
 
 DELETION_ATTEMPTS = 4
-
+SECONDS_BETWEEN_DELETION_ATTEMPTS = 1
 
 class PortNotUnBoundException(n_exc.InUse):
     message = _("Port: %(port_id)s not unbound yet.")
 
 
-class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
-    """Driver class for service VMs used with the ML2 OVS plugin.
-
-    The driver makes use of ML2 L2 API.
+class VIFHotPlugPluggingDriver(plug.PluginSidePluggingDriver):
+    """Driver class for service VMs used with Neutron plugins supporting
+    VIF hot-plug.
     """
 
     def __init__(self):
@@ -77,9 +76,8 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                 'device_owner': complementary_id}}
             try:
                 mgmt_port = self._core_plugin.create_port(context, p_spec)
-
             except n_exc.NeutronException as e:
-                LOG.error(_('Error %s when creating management port. '
+                LOG.error(_LE('Error %s when creating management port. '
                             'Cleaning up.'), e)
                 self.delete_hosting_device_resources(
                     context, tenant_id, mgmt_port)
@@ -118,19 +116,20 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
             try:
                 self._delete_resource_port(context, mgmt_port['id'])
             except n_exc.NeutronException as e:
-                LOG.error(_("Unable to delete port:%(port)s after %(tries)d"
-                            " attempts due to exception %(exception)s. "
-                            "Skipping it"), {'port': mgmt_port['id'],
-                                             'tries': DELETION_ATTEMPTS,
-                                             'exception': str(e)})
+                LOG.error(_LE("Unable to delete port:%(port)s after %(tries)d"
+                              " attempts due to exception %(exception)s. "
+                              "Skipping it"), {'port': mgmt_port['id'],
+                                               'tries': DELETION_ATTEMPTS,
+                                               'exception': str(e)})
 
-    @utils.retry(n_exc.NeutronException, DELETION_ATTEMPTS, 1)
+    @utils.retry(n_exc.NeutronException, DELETION_ATTEMPTS,
+                 SECONDS_BETWEEN_DELETION_ATTEMPTS)
     def _delete_resource_port(self, context, port_id):
         try:
             self._core_plugin.delete_port(context, port_id)
-            LOG.info(_("Port %s deleted successfully"), port_id)
+            LOG.debug("Port %s deleted successfully", port_id)
         except n_exc.PortNotFound:
-            LOG.warning(_('Trying to delete port:%s, but port not found'),
+            LOG.warning(_LW('Trying to delete port:%s, but port not found'),
                         port_id)
 
     @utils.retry(PortNotUnBoundException, tries=6)
@@ -197,8 +196,7 @@ class ML2OVSPluggingDriver(plug.PluginSidePluggingDriver):
                                            hosting_device_id):
         """Removes connectivity for a logical port.
 
-        This is done by hot unplugging the interface(VIF) corresponding to the
-        port from the CSR.
+        Unplugs the corresponding data interface from the CSR.
         """
         if port_db is None or port_db.get('id') is None:
             LOG.warning(_LW("Port id is None! Cannot remove port "
