@@ -53,7 +53,7 @@ class TestVIFHotPlugPluggingDriver(base.BaseTestCase):
         mocked_plugin.delete_port = mock.MagicMock(
             side_effect=[n_exc.NeutronException, n_exc.NeutronException,
                          mock.Mock])
-        with mock.patch.object(VIFHotPlugPluggingDriver, 
+        with mock.patch.object(VIFHotPlugPluggingDriver,
                                '_core_plugin') as plugin:
             plugin.__get__ = mock.MagicMock(return_value=mocked_plugin)
             vif_plugging_driver = VIFHotPlugPluggingDriver()

@@ -35,6 +35,7 @@ LOG = logging.getLogger(__name__)
 DELETION_ATTEMPTS = 4
 SECONDS_BETWEEN_DELETION_ATTEMPTS = 1
 
+
 class PortNotUnBoundException(n_exc.InUse):
     message = _("Port: %(port_id)s not unbound yet.")
 
