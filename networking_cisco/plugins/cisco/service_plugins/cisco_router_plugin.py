@@ -93,3 +93,6 @@ class CiscoRouterPlugin(common_db_mixin.CommonDbMixin,
     def notify_routers_updated(self, context, router_ids):
         #ToDo(Hareesh): Figure out whats to be done.
         pass
+
+    def get_workers(self):
+        return []
