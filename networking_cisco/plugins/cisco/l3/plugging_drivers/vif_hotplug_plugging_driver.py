@@ -115,7 +115,7 @@ class VIFHotPlugPluggingDriver(plug.PluginSidePluggingDriver):
 
         if mgmt_port is not None:
             try:
-                self._delete_resource_port(context, mgmt_port['id'])
+                self._cleanup_hosting_port(context, mgmt_port['id'])
             except n_exc.NeutronException as e:
                 LOG.error(_LE("Unable to delete port:%(port)s after %(tries)d"
                               " attempts due to exception %(exception)s. "
