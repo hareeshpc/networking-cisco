@@ -12,7 +12,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import commands
 import copy
+import os
 
 from oslo_concurrency import lockutils
 from oslo_config import cfg
@@ -94,6 +96,8 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
         self._l3_cfg_rpc_notifier = value
 
     def create_router(self, context, router):
+        # for processing of backlogged, i.e., non-scheduled, routers
+        self._setup_backlog_handling()
         with context.session.begin(subtransactions=True):
             if self.mgmt_nw_id() is None:
                 raise RouterCreateInternalError()
@@ -356,6 +360,17 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
         self._delete_service_vm_hosting_device(context.elevated(),
                                                hosting_device)
 
+    def _is_master_process(self):
+        ppid = os.getppid()
+        parent_name = commands.getoutput(
+            'ps -p %s -o comm --no-headers' % ppid)
+        is_master = parent_name != "python"
+        LOG.debug('Executable of parent process(%d) is %s so this is %s '
+                  'process (%d)' % (ppid, parent_name,
+                                    'the MASTER' if is_master else 'a WORKER',
+                                    os.getpid()))
+        return is_master
+
     @lockutils.synchronized('routers', 'neutron-')
     def backlog_router(self, context, router_binding):
         # Ensure we get latest state from DB in case it was updated while
@@ -388,6 +403,11 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
         # try to reschedule
         for r_id in set(self._backlogged_routers):
             binding_info = self._get_router_binding_info(context, r_id)
+            if binding_info.hosting_device_id is not None:
+                # this router was scheduled by some other process so it
+                # requires no further processing
+                self._backlogged_routers.pop(r_id)
+                continue
             self.schedule_router_on_hosting_device(context, binding_info)
             context.session.expire(binding_info)
             if binding_info.hosting_device is not None:
@@ -403,6 +423,7 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
                                                      scheduled_routers)
 
     def _setup_backlog_handling(self):
+        LOG.debug('Activating periodic backlog processor')
         self._heartbeat = loopingcall.FixedIntervalLoopingCall(
             self._process_backlogged_routers)
         self._heartbeat.start(
