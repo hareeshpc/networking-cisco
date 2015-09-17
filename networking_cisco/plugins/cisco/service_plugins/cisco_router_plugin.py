@@ -91,8 +91,6 @@ class CiscoRouterPlugin(common_db_mixin.CommonDbMixin,
             return self._plugin
 
     def notify_routers_updated(self, context, router_ids):
-        #ToDo(Hareesh): Figure out whats to be done.
+        # ToDo(Hareesh): This needs to be revisted L or post L cycle
         pass
 
-    def get_workers(self):
-        return []

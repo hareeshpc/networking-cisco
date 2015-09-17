@@ -12,9 +12,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import commands
 import copy
 import os
+import subprocess
 
 from oslo_concurrency import lockutils
 from oslo_config import cfg
@@ -362,8 +362,9 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
 
     def _is_master_process(self):
         ppid = os.getppid()
-        parent_name = commands.getoutput(
-            'ps -p %s -o comm --no-headers' % ppid)
+        parent_name = subprocess.check_output(
+            # 'comm=' removes the header COMM and returns only the process name
+            ["ps", "-p", str(ppid), "-o", "comm="])
         is_master = parent_name != "python"
         LOG.debug('Executable of parent process(%d) is %s so this is %s '
                   'process (%d)' % (ppid, parent_name,
